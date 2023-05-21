@@ -5,7 +5,8 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import numpy as np
 from sklearn.metrics import precision_recall_fscore_support
-
+from torchmetrics.detection.mean_ap import MeanAveragePrecision
+from pprint import pprint
 
 def train(model, device, train_loader, optimizer, epoch, print_interval=10):
     model.train()
@@ -83,6 +84,24 @@ def evaluate(model, device, test_loader, iou_threshold=0.5, score_threshold=0.5)
                 current_loss = bbox_loss(pred_boxes, matched_gt_boxes) + cls_loss(pred_scores.unsqueeze(-1),
                                                                                   matched_gt_labels.unsqueeze(-1))
                 total_loss += current_loss.item()
+                metric = MeanAveragePrecision()
+
+                preds = [
+                    dict(
+                        boxes=pred_boxes,
+                        scores=pred_scores,
+                        labels=pred_labels,
+                    )
+                ]
+
+                target = [
+                    dict(
+                        boxes=matched_gt_boxes,
+                        labels=matched_gt_labels,
+                    )
+                ]
+
+                metric.update(preds, target)
                 # print(bbox_loss(pred_boxes, matched_gt_boxes))
                 # print(cls_loss(pred_scores.unsqueeze(-1), matched_gt_labels.unsqueeze(-1)))
 
@@ -90,8 +109,11 @@ def evaluate(model, device, test_loader, iou_threshold=0.5, score_threshold=0.5)
     precision = num_true_positives / (num_true_positives + num_false_positives + eps)
     recall = num_true_positives / (num_true_positives + num_false_negatives + eps)
     f1_score = 2 * precision * recall / (precision + recall + eps)
-
     average_loss_per_epoch = total_loss / len(test_loader)
+    map_score = metric.compute()
+    print("Все метрики:")
+    print(map_score)
+    print("Mean Average Precision:", map_score.map)
     print(
         f"Average Loss: {average_loss_per_epoch:.4f}, Precision: {precision:.4f}, Recall: {recall:.4f}, F1-score: {f1_score:.4f}")
-    return average_loss_per_epoch, precision, recall, f1_score
+    return average_loss_per_epoch, precision, recall, f1_score, map_score.map
